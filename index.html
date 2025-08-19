@@ -2106,99 +2106,108 @@ Shopify.routes.root = "/";</script>
 </div></body>
 
 <script>
-    // NUCLEAR OPTION - Aggressive reload prevention
+    // SMART RELOAD PREVENTION - Stops reloads but keeps page functional
 (function() {
     'use strict';
     
-    console.log('🛑 ACTIVATING NUCLEAR RELOAD PREVENTION...');
+    console.log('🛑 Smart reload prevention activated...');
     
     // 1. IMMEDIATE STOP
     try { window.stop(); } catch(e) {}
     
-    // 2. FREEZE THE PAGE COMPLETELY
-    document.documentElement.style.pointerEvents = 'none';
-    document.body.style.overflow = 'hidden';
+    // 2. PREVENT NAVIGATION WITHOUT BLOCKING USER INTERACTION
+    const killNavigation = (source) => {
+        console.log('❌ Navigation blocked from:', source);
+        return false;
+    };
     
-    // 3. KILL ALL NAVIGATION
-    const killNavigation = () => false;
+    // Override navigation methods
+    window.location.reload = () => killNavigation('reload');
+    window.location.replace = () => killNavigation('replace');
+    window.location.assign = () => killNavigation('assign');
     
-    // Override ALL possible navigation methods
-    window.location.reload = killNavigation;
-    window.location.replace = killNavigation;
-    window.location.assign = killNavigation;
-    
+    // Protect href changes but allow reading
+    const originalHref = window.location.href;
     Object.defineProperty(window.location, 'href', {
-        get: () => window.location.toString(),
-        set: killNavigation
+        get: () => originalHref,
+        set: () => killNavigation('href setter')
     });
     
-    // 4. DESTROY ALL TIMERS AGGRESSIVELY
+    // 3. SMART TIMER MANAGEMENT - Only block suspicious timers
     const originalSetTimeout = window.setTimeout;
     const originalSetInterval = window.setInterval;
+    const suspiciousTimers = new Set();
     
-    window.setTimeout = function() {
-        console.log('❌ setTimeout blocked');
-        return 0;
+    window.setTimeout = function(callback, delay, ...args) {
+        // Block very short delays that might cause reloads
+        if (delay < 100) {
+            console.log('❌ Suspicious setTimeout blocked (delay: ' + delay + 'ms)');
+            return 0;
+        }
+        
+        // Wrap callback to detect reload attempts
+        const wrappedCallback = function() {
+            try {
+                const result = callback.apply(this, args);
+                return result;
+            } catch(e) {
+                console.log('Timer callback error (prevented potential reload):', e);
+            }
+        };
+        
+        return originalSetTimeout.call(this, wrappedCallback, delay);
     };
     
-    window.setInterval = function() {
-        console.log('❌ setInterval blocked');
-        return 0;
+    window.setInterval = function(callback, delay, ...args) {
+        // Block very frequent intervals
+        if (delay < 500) {
+            console.log('❌ Suspicious setInterval blocked (delay: ' + delay + 'ms)');
+            return 0;
+        }
+        
+        const wrappedCallback = function() {
+            try {
+                return callback.apply(this, args);
+            } catch(e) {
+                console.log('Interval callback error (prevented potential reload):', e);
+            }
+        };
+        
+        return originalSetInterval.call(this, wrappedCallback, delay);
     };
     
-    // Clear existing timers - more aggressive approach
-    for(let i = 1; i < 99999; i++) {
+    // Clear existing suspicious timers
+    for(let i = 1; i < 1000; i++) {
         try {
             clearTimeout(i);
             clearInterval(i);
         } catch(e) {}
     }
     
-    // 5. BLOCK ALL EVENT LISTENERS
-    const originalAddEventListener = window.addEventListener;
-    window.addEventListener = function(type, listener, options) {
-        if (type === 'beforeunload' || type === 'unload' || type === 'pagehide') {
-            console.log('❌ Blocked event listener:', type);
-            return;
-        }
-        return originalAddEventListener.call(this, type, listener, options);
-    };
-    
-    // 6. INTERCEPT AND KILL FETCH/XHR REQUESTS
+    // 4. PREVENT AUTOMATIC REDIRECTS BUT ALLOW USER CLICKS
     const originalFetch = window.fetch;
-    window.fetch = function() {
-        console.log('❌ Fetch request blocked');
-        return Promise.reject('Blocked by reload preventer');
+    window.fetch = function(url, options = {}) {
+        // Allow fetch but monitor for redirect responses
+        return originalFetch.call(this, url, options).then(response => {
+            if (response.redirected) {
+                console.log('❌ Redirect response blocked');
+                throw new Error('Redirect blocked by reload preventer');
+            }
+            return response;
+        });
     };
     
-    const originalXHROpen = XMLHttpRequest.prototype.open;
-    XMLHttpRequest.prototype.open = function() {
-        console.log('❌ XHR request blocked');
-        return false;
-    };
-    
-    // 7. PREVENT FORM SUBMISSIONS
+    // 5. BLOCK ONLY AUTOMATIC FORM SUBMISSIONS
     document.addEventListener('submit', (e) => {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        console.log('❌ Form submission blocked');
+        // Allow manual submissions, block automatic ones
+        if (!e.isTrusted) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            console.log('❌ Automatic form submission blocked');
+        }
     }, true);
     
-    // 8. BLOCK ALL CLICKS AND INTERACTIONS
-    document.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        console.log('❌ Click blocked');
-    }, true);
-    
-    // 9. OVERRIDE HISTORY API
-    window.history.pushState = killNavigation;
-    window.history.replaceState = killNavigation;
-    window.history.go = killNavigation;
-    window.history.back = killNavigation;
-    window.history.forward = killNavigation;
-    
-    // 10. REMOVE ALL META REFRESH TAGS
+    // 6. REMOVE META REFRESH TAGS
     const removeMetaRefresh = () => {
         const metas = document.querySelectorAll('meta[http-equiv="refresh"], meta[http-equiv="Refresh"]');
         metas.forEach(meta => {
@@ -2209,51 +2218,88 @@ Shopify.routes.root = "/";</script>
     
     removeMetaRefresh();
     
-    // 11. MUTATION OBSERVER TO CATCH NEW META TAGS
+    // 7. WATCH FOR NEW META REFRESH TAGS
     const observer = new MutationObserver(() => {
         removeMetaRefresh();
     });
     
-    observer.observe(document.head, {
-        childList: true,
-        subtree: true
+    if (document.head) {
+        observer.observe(document.head, {
+            childList: true,
+            subtree: true
+        });
+    }
+    
+    // 8. BLOCK HISTORY MANIPULATION BUT ALLOW MANUAL NAVIGATION
+    const originalPushState = window.history.pushState;
+    const originalReplaceState = window.history.replaceState;
+    
+    window.history.pushState = function(state, title, url) {
+        if (url && url !== window.location.href) {
+            console.log('❌ History pushState blocked');
+            return;
+        }
+        return originalPushState.call(this, state, title, url);
+    };
+    
+    window.history.replaceState = function(state, title, url) {
+        if (url && url !== window.location.href) {
+            console.log('❌ History replaceState blocked');
+            return;
+        }
+        return originalReplaceState.call(this, state, title, url);
+    };
+    
+    // 9. PREVENT WINDOW FOCUS/BLUR RELOAD TRICKS
+    let focusReloadPrevented = false;
+    window.addEventListener('focus', () => {
+        if (!focusReloadPrevented) {
+            focusReloadPrevented = true;
+            setTimeout(() => { focusReloadPrevented = false; }, 1000);
+        }
     });
     
-    // 12. FREEZE WINDOW OBJECT
-    try {
-        Object.freeze(window.location);
-    } catch(e) {}
+    window.addEventListener('blur', (e) => {
+        if (focusReloadPrevented) {
+            e.preventDefault();
+            e.stopImmediatePropagation();
+        }
+    });
     
-    // 13. CREATE OVERLAY MESSAGE
-    const overlay = document.createElement('div');
-    overlay.style.cssText = `
+    // 10. CREATE SMALL NOTIFICATION (NON-BLOCKING)
+    const notification = document.createElement('div');
+    notification.style.cssText = `
         position: fixed;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        background: rgba(0,0,0,0.8);
+        top: 10px;
+        right: 10px;
+        background: #28a745;
         color: white;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        padding: 10px 15px;
+        border-radius: 5px;
         z-index: 999999;
         font-family: Arial;
-        font-size: 24px;
-        text-align: center;
+        font-size: 14px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        pointer-events: none;
     `;
-    overlay.innerHTML = `
-        <div>
-            🛑 PAGE RELOAD STOPPED 🛑<br>
-            <small style="font-size: 14px;">All navigation and reloading has been disabled.<br>
-            Close this tab or navigate away manually.</small>
-        </div>
-    `;
+    notification.textContent = '🛑 Reload protection active';
     
-    document.body.appendChild(overlay);
+    document.body.appendChild(notification);
     
-    console.log('🛑 NUCLEAR RELOAD PREVENTION ACTIVATED!');
-    console.log('🔒 Page is now frozen. Close tab to exit.');
+    // Auto-hide notification after 5 seconds
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.style.opacity = '0';
+            notification.style.transition = 'opacity 0.5s';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, 500);
+        }
+    }, 5000);
+    
+    console.log('✅ Smart reload prevention activated! Page remains interactive.');
     
 })();
 </script>
