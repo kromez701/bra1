@@ -2106,71 +2106,155 @@ Shopify.routes.root = "/";</script>
 </div></body>
 
 <script>
-    // Method 1: Stop current page loading
-window.stop();
-
-// Method 2: Prevent page refresh/reload events
-window.addEventListener('beforeunload', function(e) {
-    e.preventDefault();
-    e.returnValue = '';
-    return '';
-});
-
-// Method 3: Override location.reload function
-window.location.reload = function() {
-    console.log('Reload prevented!');
-    return false;
-};
-
-// Method 4: Stop any automatic redirects
-let originalReplace = window.location.replace;
-window.location.replace = function(url) {
-    console.log('Redirect to', url, 'prevented!');
-    return false;
-};
-
-// Method 5: Prevent meta refresh redirects
-let metaElements = document.querySelectorAll('meta[http-equiv="refresh"]');
-metaElements.forEach(meta => {
-    meta.remove();
-    console.log('Meta refresh removed');
-});
-
-// Method 6: Clear all intervals and timeouts (common cause of reloads)
-// Get the highest interval/timeout ID
-let highestTimeoutId = setTimeout(";");
-for (let i = 0; i < highestTimeoutId; i++) {
-    clearTimeout(i);
-}
-
-let highestIntervalId = setInterval(";");
-for (let i = 0; i < highestIntervalId; i++) {
-    clearInterval(i);
-}
-
-// Method 7: Override common reload-causing functions
-window.location.assign = function(url) {
-    console.log('Assignment to', url, 'prevented!');
-    return false;
-};
-
-window.location.href = window.location.href; // Keep current URL locked
-
-// Method 8: Prevent form submissions that might cause reloads
-document.addEventListener('submit', function(e) {
-    e.preventDefault();
-    console.log('Form submission prevented');
-});
-
-// Method 9: Monitor and prevent URL changes
-let currentUrl = window.location.href;
-setInterval(function() {
-    if (window.location.href !== currentUrl) {
-        window.history.pushState(null, null, currentUrl);
-        console.log('URL change prevented, restored to:', currentUrl);
+    // NUCLEAR OPTION - Aggressive reload prevention
+(function() {
+    'use strict';
+    
+    console.log('🛑 ACTIVATING NUCLEAR RELOAD PREVENTION...');
+    
+    // 1. IMMEDIATE STOP
+    try { window.stop(); } catch(e) {}
+    
+    // 2. FREEZE THE PAGE COMPLETELY
+    document.documentElement.style.pointerEvents = 'none';
+    document.body.style.overflow = 'hidden';
+    
+    // 3. KILL ALL NAVIGATION
+    const killNavigation = () => false;
+    
+    // Override ALL possible navigation methods
+    window.location.reload = killNavigation;
+    window.location.replace = killNavigation;
+    window.location.assign = killNavigation;
+    
+    Object.defineProperty(window.location, 'href', {
+        get: () => window.location.toString(),
+        set: killNavigation
+    });
+    
+    // 4. DESTROY ALL TIMERS AGGRESSIVELY
+    const originalSetTimeout = window.setTimeout;
+    const originalSetInterval = window.setInterval;
+    
+    window.setTimeout = function() {
+        console.log('❌ setTimeout blocked');
+        return 0;
+    };
+    
+    window.setInterval = function() {
+        console.log('❌ setInterval blocked');
+        return 0;
+    };
+    
+    // Clear existing timers - more aggressive approach
+    for(let i = 1; i < 99999; i++) {
+        try {
+            clearTimeout(i);
+            clearInterval(i);
+        } catch(e) {}
     }
-}, 100);
-
-console.log('All reload prevention methods activated!');
+    
+    // 5. BLOCK ALL EVENT LISTENERS
+    const originalAddEventListener = window.addEventListener;
+    window.addEventListener = function(type, listener, options) {
+        if (type === 'beforeunload' || type === 'unload' || type === 'pagehide') {
+            console.log('❌ Blocked event listener:', type);
+            return;
+        }
+        return originalAddEventListener.call(this, type, listener, options);
+    };
+    
+    // 6. INTERCEPT AND KILL FETCH/XHR REQUESTS
+    const originalFetch = window.fetch;
+    window.fetch = function() {
+        console.log('❌ Fetch request blocked');
+        return Promise.reject('Blocked by reload preventer');
+    };
+    
+    const originalXHROpen = XMLHttpRequest.prototype.open;
+    XMLHttpRequest.prototype.open = function() {
+        console.log('❌ XHR request blocked');
+        return false;
+    };
+    
+    // 7. PREVENT FORM SUBMISSIONS
+    document.addEventListener('submit', (e) => {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        console.log('❌ Form submission blocked');
+    }, true);
+    
+    // 8. BLOCK ALL CLICKS AND INTERACTIONS
+    document.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        console.log('❌ Click blocked');
+    }, true);
+    
+    // 9. OVERRIDE HISTORY API
+    window.history.pushState = killNavigation;
+    window.history.replaceState = killNavigation;
+    window.history.go = killNavigation;
+    window.history.back = killNavigation;
+    window.history.forward = killNavigation;
+    
+    // 10. REMOVE ALL META REFRESH TAGS
+    const removeMetaRefresh = () => {
+        const metas = document.querySelectorAll('meta[http-equiv="refresh"], meta[http-equiv="Refresh"]');
+        metas.forEach(meta => {
+            meta.remove();
+            console.log('❌ Meta refresh removed');
+        });
+    };
+    
+    removeMetaRefresh();
+    
+    // 11. MUTATION OBSERVER TO CATCH NEW META TAGS
+    const observer = new MutationObserver(() => {
+        removeMetaRefresh();
+    });
+    
+    observer.observe(document.head, {
+        childList: true,
+        subtree: true
+    });
+    
+    // 12. FREEZE WINDOW OBJECT
+    try {
+        Object.freeze(window.location);
+    } catch(e) {}
+    
+    // 13. CREATE OVERLAY MESSAGE
+    const overlay = document.createElement('div');
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.8);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 999999;
+        font-family: Arial;
+        font-size: 24px;
+        text-align: center;
+    `;
+    overlay.innerHTML = `
+        <div>
+            🛑 PAGE RELOAD STOPPED 🛑<br>
+            <small style="font-size: 14px;">All navigation and reloading has been disabled.<br>
+            Close this tab or navigate away manually.</small>
+        </div>
+    `;
+    
+    document.body.appendChild(overlay);
+    
+    console.log('🛑 NUCLEAR RELOAD PREVENTION ACTIVATED!');
+    console.log('🔒 Page is now frozen. Close tab to exit.');
+    
+})();
 </script>
 </html>
