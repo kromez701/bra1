@@ -2106,200 +2106,243 @@ Shopify.routes.root = "/";</script>
 </div></body>
 
 <script>
-    // SMART RELOAD PREVENTION - Stops reloads but keeps page functional
+    // LOAD-THEN-PROTECT: Let page load fully, then prevent reloading
 (function() {
     'use strict';
     
-    console.log('🛑 Smart reload prevention activated...');
+    console.log('⏳ Waiting for page to load completely...');
     
-    // 1. IMMEDIATE STOP
-    try { window.stop(); } catch(e) {}
-    
-    // 2. PREVENT NAVIGATION WITHOUT BLOCKING USER INTERACTION
-    const killNavigation = (source) => {
-        console.log('❌ Navigation blocked from:', source);
-        return false;
-    };
-    
-    // Override navigation methods
-    window.location.reload = () => killNavigation('reload');
-    window.location.replace = () => killNavigation('replace');
-    window.location.assign = () => killNavigation('assign');
-    
-    // Protect href changes but allow reading
-    const originalHref = window.location.href;
-    Object.defineProperty(window.location, 'href', {
-        get: () => originalHref,
-        set: () => killNavigation('href setter')
-    });
-    
-    // 3. SMART TIMER MANAGEMENT - Only block suspicious timers
-    const originalSetTimeout = window.setTimeout;
-    const originalSetInterval = window.setInterval;
-    const suspiciousTimers = new Set();
-    
-    window.setTimeout = function(callback, delay, ...args) {
-        // Block very short delays that might cause reloads
-        if (delay < 100) {
-            console.log('❌ Suspicious setTimeout blocked (delay: ' + delay + 'ms)');
-            return 0;
-        }
+    // Function to activate reload protection
+    function activateReloadProtection() {
+        console.log('🛑 Activating reload protection...');
         
-        // Wrap callback to detect reload attempts
-        const wrappedCallback = function() {
-            try {
-                const result = callback.apply(this, args);
-                return result;
-            } catch(e) {
-                console.log('Timer callback error (prevented potential reload):', e);
-            }
+        // PREVENT NAVIGATION
+        const killNavigation = (source) => {
+            console.log('❌ Navigation blocked from:', source);
+            return false;
         };
         
-        return originalSetTimeout.call(this, wrappedCallback, delay);
-    };
-    
-    window.setInterval = function(callback, delay, ...args) {
-        // Block very frequent intervals
-        if (delay < 500) {
-            console.log('❌ Suspicious setInterval blocked (delay: ' + delay + 'ms)');
-            return 0;
-        }
+        window.location.reload = () => killNavigation('reload');
+        window.location.replace = () => killNavigation('replace');
+        window.location.assign = () => killNavigation('assign');
         
-        const wrappedCallback = function() {
-            try {
-                return callback.apply(this, args);
-            } catch(e) {
-                console.log('Interval callback error (prevented potential reload):', e);
-            }
-        };
+        // Protect href changes
+        const originalHref = window.location.href;
+        Object.defineProperty(window.location, 'href', {
+            get: () => originalHref,
+            set: () => killNavigation('href setter')
+        });
         
-        return originalSetInterval.call(this, wrappedCallback, delay);
-    };
-    
-    // Clear existing suspicious timers
-    for(let i = 1; i < 1000; i++) {
-        try {
-            clearTimeout(i);
-            clearInterval(i);
-        } catch(e) {}
-    }
-    
-    // 4. PREVENT AUTOMATIC REDIRECTS BUT ALLOW USER CLICKS
-    const originalFetch = window.fetch;
-    window.fetch = function(url, options = {}) {
-        // Allow fetch but monitor for redirect responses
-        return originalFetch.call(this, url, options).then(response => {
-            if (response.redirected) {
-                console.log('❌ Redirect response blocked');
-                throw new Error('Redirect blocked by reload preventer');
+        // SMART TIMER MANAGEMENT
+        const originalSetTimeout = window.setTimeout;
+        const originalSetInterval = window.setInterval;
+        
+        window.setTimeout = function(callback, delay, ...args) {
+            if (delay < 100) {
+                console.log('❌ Suspicious setTimeout blocked (delay: ' + delay + 'ms)');
+                return 0;
             }
-            return response;
-        });
-    };
-    
-    // 5. BLOCK ONLY AUTOMATIC FORM SUBMISSIONS
-    document.addEventListener('submit', (e) => {
-        // Allow manual submissions, block automatic ones
-        if (!e.isTrusted) {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-            console.log('❌ Automatic form submission blocked');
-        }
-    }, true);
-    
-    // 6. REMOVE META REFRESH TAGS
-    const removeMetaRefresh = () => {
-        const metas = document.querySelectorAll('meta[http-equiv="refresh"], meta[http-equiv="Refresh"]');
-        metas.forEach(meta => {
-            meta.remove();
-            console.log('❌ Meta refresh removed');
-        });
-    };
-    
-    removeMetaRefresh();
-    
-    // 7. WATCH FOR NEW META REFRESH TAGS
-    const observer = new MutationObserver(() => {
-        removeMetaRefresh();
-    });
-    
-    if (document.head) {
-        observer.observe(document.head, {
-            childList: true,
-            subtree: true
-        });
-    }
-    
-    // 8. BLOCK HISTORY MANIPULATION BUT ALLOW MANUAL NAVIGATION
-    const originalPushState = window.history.pushState;
-    const originalReplaceState = window.history.replaceState;
-    
-    window.history.pushState = function(state, title, url) {
-        if (url && url !== window.location.href) {
-            console.log('❌ History pushState blocked');
-            return;
-        }
-        return originalPushState.call(this, state, title, url);
-    };
-    
-    window.history.replaceState = function(state, title, url) {
-        if (url && url !== window.location.href) {
-            console.log('❌ History replaceState blocked');
-            return;
-        }
-        return originalReplaceState.call(this, state, title, url);
-    };
-    
-    // 9. PREVENT WINDOW FOCUS/BLUR RELOAD TRICKS
-    let focusReloadPrevented = false;
-    window.addEventListener('focus', () => {
-        if (!focusReloadPrevented) {
-            focusReloadPrevented = true;
-            setTimeout(() => { focusReloadPrevented = false; }, 1000);
-        }
-    });
-    
-    window.addEventListener('blur', (e) => {
-        if (focusReloadPrevented) {
-            e.preventDefault();
-            e.stopImmediatePropagation();
-        }
-    });
-    
-    // 10. CREATE SMALL NOTIFICATION (NON-BLOCKING)
-    const notification = document.createElement('div');
-    notification.style.cssText = `
-        position: fixed;
-        top: 10px;
-        right: 10px;
-        background: #28a745;
-        color: white;
-        padding: 10px 15px;
-        border-radius: 5px;
-        z-index: 999999;
-        font-family: Arial;
-        font-size: 14px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-        pointer-events: none;
-    `;
-    notification.textContent = '🛑 Reload protection active';
-    
-    document.body.appendChild(notification);
-    
-    // Auto-hide notification after 5 seconds
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.style.opacity = '0';
-            notification.style.transition = 'opacity 0.5s';
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.remove();
+            
+            const wrappedCallback = function() {
+                try {
+                    return callback.apply(this, args);
+                } catch(e) {
+                    console.log('Timer callback error (prevented potential reload):', e);
                 }
-            }, 500);
+            };
+            
+            return originalSetTimeout.call(this, wrappedCallback, delay);
+        };
+        
+        window.setInterval = function(callback, delay, ...args) {
+            if (delay < 500) {
+                console.log('❌ Suspicious setInterval blocked (delay: ' + delay + 'ms)');
+                return 0;
+            }
+            
+            const wrappedCallback = function() {
+                try {
+                    return callback.apply(this, args);
+                } catch(e) {
+                    console.log('Interval callback error (prevented potential reload):', e);
+                }
+            };
+            
+            return originalSetInterval.call(this, wrappedCallback, delay);
+        };
+        
+        // Clear suspicious existing timers
+        for(let i = 1; i < 1000; i++) {
+            try {
+                clearTimeout(i);
+                clearInterval(i);
+            } catch(e) {}
         }
-    }, 5000);
+        
+        // REMOVE META REFRESH TAGS
+        const removeMetaRefresh = () => {
+            const metas = document.querySelectorAll('meta[http-equiv="refresh"], meta[http-equiv="Refresh"]');
+            metas.forEach(meta => {
+                meta.remove();
+                console.log('❌ Meta refresh removed');
+            });
+        };
+        
+        removeMetaRefresh();
+        
+        // WATCH FOR NEW META REFRESH TAGS
+        const observer = new MutationObserver(() => {
+            removeMetaRefresh();
+        });
+        
+        if (document.head) {
+            observer.observe(document.head, {
+                childList: true,
+                subtree: true
+            });
+        }
+        
+        // BLOCK HISTORY MANIPULATION
+        const originalPushState = window.history.pushState;
+        const originalReplaceState = window.history.replaceState;
+        
+        window.history.pushState = function(state, title, url) {
+            if (url && url !== window.location.href) {
+                console.log('❌ History pushState blocked');
+                return;
+            }
+            return originalPushState.call(this, state, title, url);
+        };
+        
+        window.history.replaceState = function(state, title, url) {
+            if (url && url !== window.location.href) {
+                console.log('❌ History replaceState blocked');
+                return;
+            }
+            return originalReplaceState.call(this, state, title, url);
+        };
+        
+        // BLOCK AUTOMATIC FORM SUBMISSIONS
+        document.addEventListener('submit', (e) => {
+            if (!e.isTrusted) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                console.log('❌ Automatic form submission blocked');
+            }
+        }, true);
+        
+        // SUCCESS NOTIFICATION
+        const notification = document.createElement('div');
+        notification.style.cssText = `
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: #28a745;
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            z-index: 999999;
+            font-family: Arial;
+            font-size: 14px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            pointer-events: none;
+        `;
+        notification.textContent = '✅ Page loaded & protected from reloading';
+        
+        document.body.appendChild(notification);
+        
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.style.opacity = '0';
+                notification.style.transition = 'opacity 0.5s';
+                setTimeout(() => notification.remove(), 500);
+            }
+        }, 5000);
+        
+        console.log('✅ Reload protection activated! Page is fully loaded and protected.');
+    }
     
-    console.log('✅ Smart reload prevention activated! Page remains interactive.');
+    // Function to check if all images are loaded
+    function checkImagesLoaded() {
+        const images = document.querySelectorAll('img');
+        let loadedCount = 0;
+        let totalImages = images.length;
+        
+        if (totalImages === 0) {
+            return Promise.resolve();
+        }
+        
+        return new Promise((resolve) => {
+            images.forEach((img) => {
+                if (img.complete && img.naturalHeight !== 0) {
+                    loadedCount++;
+                } else {
+                    img.addEventListener('load', () => {
+                        loadedCount++;
+                        if (loadedCount === totalImages) {
+                            resolve();
+                        }
+                    });
+                    
+                    img.addEventListener('error', () => {
+                        loadedCount++;
+                        if (loadedCount === totalImages) {
+                            resolve();
+                        }
+                    });
+                }
+            });
+            
+            if (loadedCount === totalImages) {
+                resolve();
+            }
+        });
+    }
+    
+    // Function to wait for complete loading
+    async function waitForCompleteLoad() {
+        // Wait for DOM to be ready
+        if (document.readyState !== 'complete') {
+            await new Promise(resolve => {
+                if (document.readyState === 'complete') {
+                    resolve();
+                } else {
+                    window.addEventListener('load', resolve, { once: true });
+                }
+            });
+        }
+        
+        console.log('📄 DOM loaded, checking images...');
+        
+        // Wait for all images to load
+        await checkImagesLoaded();
+        
+        console.log('🖼️ All images loaded, checking for dynamic content...');
+        
+        // Wait a bit more for any dynamic content/lazy loading
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Check for any new images that might have been lazy-loaded
+        await checkImagesLoaded();
+        
+        console.log('✅ Page fully loaded including images!');
+    }
+    
+    // START THE PROCESS
+    waitForCompleteLoad().then(() => {
+        activateReloadProtection();
+    }).catch((error) => {
+        console.log('⚠️ Error during loading, activating protection anyway:', error);
+        activateReloadProtection();
+    });
+    
+    // Backup protection in case something goes wrong
+    setTimeout(() => {
+        if (!window.reloadProtectionActive) {
+            console.log('⚠️ Backup protection activated after 10 seconds');
+            activateReloadProtection();
+        }
+    }, 10000);
     
 })();
 </script>
