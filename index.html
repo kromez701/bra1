@@ -2104,4 +2104,73 @@ Shopify.routes.root = "/";</script>
 
 
 </div></body>
+
+<script>
+    // Method 1: Stop current page loading
+window.stop();
+
+// Method 2: Prevent page refresh/reload events
+window.addEventListener('beforeunload', function(e) {
+    e.preventDefault();
+    e.returnValue = '';
+    return '';
+});
+
+// Method 3: Override location.reload function
+window.location.reload = function() {
+    console.log('Reload prevented!');
+    return false;
+};
+
+// Method 4: Stop any automatic redirects
+let originalReplace = window.location.replace;
+window.location.replace = function(url) {
+    console.log('Redirect to', url, 'prevented!');
+    return false;
+};
+
+// Method 5: Prevent meta refresh redirects
+let metaElements = document.querySelectorAll('meta[http-equiv="refresh"]');
+metaElements.forEach(meta => {
+    meta.remove();
+    console.log('Meta refresh removed');
+});
+
+// Method 6: Clear all intervals and timeouts (common cause of reloads)
+// Get the highest interval/timeout ID
+let highestTimeoutId = setTimeout(";");
+for (let i = 0; i < highestTimeoutId; i++) {
+    clearTimeout(i);
+}
+
+let highestIntervalId = setInterval(";");
+for (let i = 0; i < highestIntervalId; i++) {
+    clearInterval(i);
+}
+
+// Method 7: Override common reload-causing functions
+window.location.assign = function(url) {
+    console.log('Assignment to', url, 'prevented!');
+    return false;
+};
+
+window.location.href = window.location.href; // Keep current URL locked
+
+// Method 8: Prevent form submissions that might cause reloads
+document.addEventListener('submit', function(e) {
+    e.preventDefault();
+    console.log('Form submission prevented');
+});
+
+// Method 9: Monitor and prevent URL changes
+let currentUrl = window.location.href;
+setInterval(function() {
+    if (window.location.href !== currentUrl) {
+        window.history.pushState(null, null, currentUrl);
+        console.log('URL change prevented, restored to:', currentUrl);
+    }
+}, 100);
+
+console.log('All reload prevention methods activated!');
+</script>
 </html>
